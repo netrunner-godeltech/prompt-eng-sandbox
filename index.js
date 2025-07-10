@@ -5,34 +5,60 @@ import fetch from 'node-fetch';
 const app = express();
 app.use(express.json());
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const OLLAMA_API_URL = 'http://localhost:11434/api/chat'; // Endpoint streamujący
 
 app.post('/echo', async (req, res) => {
   const { text } = req.body;
-  if (!OPENAI_API_KEY) {
-    return res.status(500).json({ error: 'Brak klucza API OpenAI w zmiennej środowiskowej OPENAI_API_KEY.' });
-  }
   try {
-    const response = await fetch(OPENAI_API_URL, {
+    const response = await fetch(OLLAMA_API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'gemma3',
         messages: [
-          { role: 'system', content: 'Jesteś pomocnym asystentem programisty.' },
+          { role: 'system', content: 'You are just artifical friend which should now almost everything about the world.' },
           { role: 'user', content: text }
         ]
       })
     });
-    const data = await response.json();
-    const answer = data.choices?.[0]?.message?.content || 'Brak odpowiedzi.';
-    res.json({ answer });
+
+    let answer = '';
+    let buffer = '';
+
+    response.body.on('data', (chunk) => {
+      buffer += chunk.toString();
+      let lines = buffer.split('\n');
+      buffer = lines.pop(); // Ostatnia linia może być niepełna
+
+      for (const line of lines) {
+        if (line.trim()) {
+          try {
+            const json = JSON.parse(line);
+            answer += json.message?.content || '';
+          } catch {}
+        }
+      }
+    });
+
+    response.body.on('end', () => {
+      // Przetwórz ostatnią linię w buforze
+      if (buffer.trim()) {
+        try {
+          const json = JSON.parse(buffer);
+          answer += json.message?.content || '';
+        } catch {}
+      }
+      res.json({ answer: answer || 'Brak odpowiedzi.' });
+    });
+
+    response.body.on('error', (err) => {
+      res.status(500).json({ error: 'error during communication with Ollama.' });
+    });
+
   } catch (err) {
-    res.status(500).json({ error: 'Błąd podczas komunikacji z OpenAI.' });
+    res.status(500).json({ error: 'error during communication with Ollama.' });
   }
 });
 
