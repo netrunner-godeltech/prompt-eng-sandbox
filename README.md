@@ -1,3 +1,6 @@
+# Streamble client
+Type node ws-client.js 'your prompt' to get streamable response from ollama (via node api)
+
 # Prompt Engineering Sandbox (MCP)
 
 Platforma do eksperymentowania z promptami AI przez MCP (Model Context Protocol).

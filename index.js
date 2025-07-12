@@ -1,12 +1,14 @@
 // Prosta aplikacja Node.js, która przyjmuje string i go zwraca
 import express from 'express';
 import fetch from 'node-fetch';
+import { WebSocketServer } from 'ws';
 
 const app = express();
 app.use(express.json());
 
 const OLLAMA_API_URL = 'http://localhost:11434/api/chat'; // Endpoint streamujący
 
+// REST API (jak dotychczas)
 app.post('/echo', async (req, res) => {
   const { text } = req.body;
   try {
@@ -60,6 +62,54 @@ app.post('/echo', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'error during communication with Ollama.' });
   }
+});
+
+// WebSocket streaming
+const wss = new WebSocketServer({ port: 8081 });
+
+wss.on('connection', (ws) => {
+  ws.on('message', async (message) => {
+    // Oczekujemy, że klient wyśle prompt jako tekst
+    const text = message.toString();
+    const response = await fetch(OLLAMA_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gemma3',
+        messages: [
+          { role: 'system', content: 'You are just artifical friend which should now almost everything about the world.' },
+          { role: 'user', content: text }
+        ]
+      })
+    });
+
+    let buffer = '';
+    response.body.on('data', (chunk) => {
+      buffer += chunk.toString();
+      let lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.trim()) {
+          try {
+            const json = JSON.parse(line);
+            ws.send(json.message?.content || '');
+          } catch {}
+        }
+      }
+    });
+    response.body.on('end', () => {
+      if (buffer.trim()) {
+        try {
+          const json = JSON.parse(buffer);
+          ws.send(json.message?.content || '');
+        } catch {}
+      }
+      ws.send('[END]');
+    });
+    response.body.on('error', () => {
+      ws.send('[ERROR]');
+    });
+  });
 });
 
 const PORT = process.env.PORT || 3000;
