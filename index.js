@@ -69,17 +69,22 @@ const wss = new WebSocketServer({ port: 8081 });
 
 wss.on('connection', (ws) => {
   ws.on('message', async (message) => {
-    // Oczekujemy, że klient wyśle prompt jako tekst
-    const text = message.toString();
+    let messages;
+    try {
+      messages = JSON.parse(message.toString());
+    } catch {
+      // Jeśli nie uda się sparsować, potraktuj jako pojedynczy prompt
+      messages = [
+        { role: 'system', content: 'You are just artifical friend which should now almost everything about the world.' },
+        { role: 'user', content: message.toString() }
+      ];
+    }
     const response = await fetch(OLLAMA_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'gemma3',
-        messages: [
-          { role: 'system', content: 'You are just artifical friend which should now almost everything about the world.' },
-          { role: 'user', content: text }
-        ]
+        messages
       })
     });
 
