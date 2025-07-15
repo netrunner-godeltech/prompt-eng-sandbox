@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Prompt WebSocket Client</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    #output { white-space: pre-wrap; border: 1px solid #ccc; padding: 1em; min-height: 100px; margin-top: 1em; }
+    #prompt { width: 80%; }
+    #send { padding: 0.5em 1em; }
+    .user { color: #1565c0; font-weight: bold; }
+    .assistant { color: #388e3c; font-weight: bold; }
+    .msg { margin-bottom: 0.5em; }
+  </style>
+</head>
+<body>
+  <h2>Prompt Engineering Sandbox (WebSocket)</h2>
+  <input type="text" id="prompt" placeholder="Wpisz prompt..." />
+  <button id="send">Wyślij</button>
+  <div id="output"></div>
+
+  <script>
+    let ws;
+    let output = document.getElementById('output');
+    let sendBtn = document.getElementById('send');
+    let promptBox = document.getElementById('prompt');
+
+    // Historia rozmowy
+    let messages = [
+      { role: 'system', content: 'You are just artifical friend which should now almost everything about the world.' }
+    ];
+
+    let currentAssistantMessage = '';
+    let loading = false;
+
+    function renderChat() {
+      output.innerHTML = '';
+      for (const msg of messages) {
+        if (msg.role === 'user') {
+          output.innerHTML += `<div class="msg"><span class="user">Ty:</span> ${msg.content}</div>`;
+        } else if (msg.role === 'assistant') {
+          output.innerHTML += `<div class="msg"><span class="assistant">AI:</span> ${msg.content}</div>`;
+        }
+      }
+      // Jeśli trwa generowanie odpowiedzi, pokaż ją na bieżąco
+      if (loading && !currentAssistantMessage) {
+        output.innerHTML += `<div class="msg"><span class="assistant">AI:</span> <em>Thinking...</em></div>`;
+      }
+      if (currentAssistantMessage) {
+        output.innerHTML += `<div class="msg"><span class="assistant">AI:</span> ${currentAssistantMessage}</div>`;
+      }
+    }
+
+    function connect() {
+      ws = new WebSocket('ws://localhost:8081');
+      ws.onopen = () => {
+        output.textContent = '[Połączono z serwerem]\n';
+      };
+      ws.onmessage = (event) => {
+        if (event.data === '[END]') {
+          if (currentAssistantMessage.trim()) {
+            messages.push({ role: 'assistant', content: currentAssistantMessage });
+          }
+          currentAssistantMessage = '';
+          loading = false;
+          renderChat();
+        } else if (event.data === '[ERROR]') {
+          output.textContent += '\n[Błąd serwera]\n';
+          loading = false;
+        } else {
+          // Pierwszy fragment odpowiedzi usuwa napis "Ładowanie..."
+          if (loading) loading = false;
+          currentAssistantMessage += event.data;
+          renderChat();
+        }
+      };
+      ws.onclose = () => {
+        output.textContent += '\n[Połączenie zamknięte]\n';
+      };
+    }
+
+    sendBtn.onclick = () => {
+      const userPrompt = promptBox.value.trim();
+      if (!userPrompt) return;
+      if (!ws || ws.readyState !== 1) connect();
+      // Dodaj wiadomość użytkownika do historii
+      messages.push({ role: 'user', content: userPrompt });
+      // Wyślij całą historię jako JSON
+      ws.send(JSON.stringify(messages));
+      // Wyczyść textbox
+      promptBox.value = '';
+      // Resetuj tymczasową odpowiedź asystenta
+      currentAssistantMessage = '';
+      loading = true;
+      renderChat();
+    };
+
+    connect();
+  </script>
+</body>
+</html>
