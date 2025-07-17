@@ -26,12 +26,12 @@
     ];
 
     let currentAssistantMessage = '';
-    let loading = false;
+    let isGenerating = false; // Zmieniona nazwa dla jasności
 
     function updateInputState() {
-      promptBox.disabled = loading;
-      sendBtn.disabled = loading;
-      if (loading) {
+      promptBox.disabled = isGenerating;
+      sendBtn.disabled = isGenerating;
+      if (isGenerating) {
         promptBox.blur();
       }
     }
@@ -60,7 +60,7 @@
       }
       
       // Pokaż status ładowania lub bieżącą odpowiedź
-      if (loading && !currentAssistantMessage) {
+      if (isGenerating && !currentAssistantMessage) {
         output.innerHTML += `
           <div class="msg msg-assistant">
             <div>
@@ -81,7 +81,7 @@
       }
       
       output.scrollTop = output.scrollHeight;
-      updateInputState();
+      updateInputState(); // To będzie blokować input dopóki isGenerating = true
     }
 
     function connect() {
@@ -97,35 +97,34 @@
             messages.push({ role: 'assistant', content: currentAssistantMessage });
           }
           currentAssistantMessage = '';
-          loading = false;
+          isGenerating = false; // Odblokuj dopiero tutaj
           renderChat();
         } else if (event.data === '[ERROR]') {
           output.innerHTML += `<div class="msg"><span style="color:red;">[Błąd serwera]</span></div>`;
-          loading = false;
+          isGenerating = false;
           updateInputState();
         } else {
-          // Pierwszy fragment odpowiedzi
-          if (loading) loading = false;
+          // NIE zmieniaj isGenerating tutaj - zostaw true do końca
           currentAssistantMessage += event.data;
           renderChat();
         }
       };
       
       ws.onclose = () => {
-        loading = false;
+        isGenerating = false;
         updateInputState();
         output.innerHTML += `<div class="msg"><span style="color:#888;">[Połączenie zamknięte]</span></div>`;
       };
       
       ws.onerror = () => {
-        loading = false;
+        isGenerating = false;
         updateInputState();
       };
     }
 
     function sendMessage() {
       // Sprawdź czy można wysłać wiadomość
-      if (loading || promptBox.disabled || sendBtn.disabled) {
+      if (isGenerating || promptBox.disabled || sendBtn.disabled) {
         return;
       }
       
@@ -139,7 +138,7 @@
       }
       
       // Zablokuj input natychmiast
-      loading = true;
+      isGenerating = true;
       updateInputState();
       
       // Dodaj wiadomość użytkownika do historii
@@ -158,14 +157,14 @@
     sendBtn.onclick = sendMessage;
 
     promptBox.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && !loading && !promptBox.disabled && !sendBtn.disabled) {
+      if (e.key === 'Enter' && !isGenerating && !promptBox.disabled && !sendBtn.disabled) {
         sendMessage();
       }
     });
 
     // Zapobiegaj wysyłaniu podczas ładowania
     promptBox.addEventListener('input', function(e) {
-      if (loading) {
+      if (isGenerating) {
         e.preventDefault();
         return false;
       }
